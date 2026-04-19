@@ -1,6 +1,5 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { hashSync } from "bcryptjs";
 import { DEMO_SKILLS, DEMO_TEACHERS } from "@/lib/demo-data";
 
 type Row = Record<string, unknown>;
@@ -20,7 +19,16 @@ type JsonDB = {
 };
 
 const DB_FILE = path.join(process.cwd(), "skillswap.json");
-const DEMO_PASSWORD_HASH = hashSync("Demo12345!", 10);
+
+// ✅ FIX 1: Lazy load - top-level pe nahi, function ke andar chalega
+let _demoPasswordHash: string | null = null;
+function getDemoPasswordHash(): string {
+  if (!_demoPasswordHash) {
+    const { hashSync } = require("bcryptjs");
+    _demoPasswordHash = hashSync("Demo12345!", 10);
+  }
+  return _demoPasswordHash!;
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -60,7 +68,7 @@ function seedDB(): JsonDB {
       id: teacher.id,
       email: teacher.email,
       name: teacher.name,
-      password: DEMO_PASSWORD_HASH,
+      password: getDemoPasswordHash(), // ✅ lazy call
       avatar: null,
       bio: `Demo teacher for ${teacher.skills.map((s) => s.skillId).join(", ")}`,
       languages: teacher.languages,
@@ -116,8 +124,13 @@ async function readDB(): Promise<JsonDB> {
   }
 }
 
+// ✅ FIX 2: Vercel read-only filesystem pe silently fail karo
 async function writeDB(db: JsonDB): Promise<void> {
-  await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2), "utf8");
+  try {
+    await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2), "utf8");
+  } catch {
+    // Vercel filesystem read-only hai - silently ignore
+  }
 }
 
 function skillById(db: JsonDB, id: string): Row | undefined {
@@ -530,7 +543,7 @@ async function execute({ sql, args = [] }: { sql: string; args?: SqlArgs }): Pro
         return { ...p, skill_name: skill?.name, category: skill?.category };
       });
     rows = progressRows.sort((a, b) => String(b["created_at"]).localeCompare(String(a["created_at"])));
-  } else if (s.includes("from badges b join skills s on b.skill_id = s.id where b.user_id = ? order by b.issued_at desc") || s.includes("from badges b join skills s on b.skill_id = s.id where b.user_id = ? order by b.issued_at desc")) {
+  } else if (s.includes("from badges b join skills s on b.skill_id = s.id where b.user_id = ? order by b.issued_at desc")) {
     const badgeRows: Row[] = db.badges
       .filter((b) => b.user_id === args[0])
       .map((b): Row => {
@@ -571,7 +584,6 @@ export async function initDB(): Promise<void> {
     await fs.access(DB_FILE);
     const db = await readDB();
 
-    // Ensure seed skills and demo teachers exist.
     let changed = false;
     for (const skill of DEMO_SKILLS) {
       if (!db.skills.some((s) => s.id === skill.id)) {
@@ -592,7 +604,7 @@ export async function initDB(): Promise<void> {
           id: teacher.id,
           email: teacher.email,
           name: teacher.name,
-          password: DEMO_PASSWORD_HASH,
+          password: getDemoPasswordHash(), // ✅ lazy call
           avatar: null,
           bio: `Demo teacher for ${teacher.skills.map((s) => s.skillId).join(", ")}`,
           languages: teacher.languages,
