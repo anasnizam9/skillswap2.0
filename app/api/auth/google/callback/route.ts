@@ -18,6 +18,23 @@ type GoogleIdTokenClaims = {
   name?: string;
 };
 
+function getGoogleEnv() {
+  const clientId = (
+    process.env.GOOGLE_CLIENT_ID ||
+    process.env.AUTH_GOOGLE_ID ||
+    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+    ""
+  ).trim();
+
+  const clientSecret = (
+    process.env.GOOGLE_CLIENT_SECRET ||
+    process.env.AUTH_GOOGLE_SECRET ||
+    ""
+  ).trim();
+
+  return { clientId, clientSecret };
+}
+
 function redirectWithError(req: NextRequest, message: string) {
   const url = new URL("/login", req.nextUrl.origin);
   url.searchParams.set("error", message);
@@ -25,11 +42,13 @@ function redirectWithError(req: NextRequest, message: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const { clientId, clientSecret } = getGoogleEnv();
 
   if (!clientId || !clientSecret) {
-    return redirectWithError(req, "Google sign-in is not configured.");
+    const missing: string[] = [];
+    if (!clientId) missing.push("GOOGLE_CLIENT_ID/AUTH_GOOGLE_ID");
+    if (!clientSecret) missing.push("GOOGLE_CLIENT_SECRET/AUTH_GOOGLE_SECRET");
+    return redirectWithError(req, `Google sign-in is not configured: missing ${missing.join(", ")}`);
   }
 
   const code = req.nextUrl.searchParams.get("code");
