@@ -3,6 +3,7 @@
 import { handleMockRequest } from "@/lib/mock-api";
 
 const BASE = "";
+const FORCE_MOCK_IN_BROWSER = true;
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -14,6 +15,12 @@ async function request<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = getToken();
+
+  // Run the app DB-free in browser by using the mock API directly.
+  if (typeof window !== "undefined" && FORCE_MOCK_IN_BROWSER) {
+    return handleMockRequest<T>(path, options, token);
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),

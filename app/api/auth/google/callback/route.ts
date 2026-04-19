@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import db, { initDB } from "@/lib/db";
-import { addTokens } from "@/lib/tokens";
-import { generateToken, hashPassword } from "@/lib/auth";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo";
@@ -96,43 +93,10 @@ export async function GET(req: NextRequest) {
     if (claims.aud !== clientId || !claims.email || claims.email_verified !== "true") {
       return redirectWithError(req, "Google account is not verified.");
     }
-
-    await initDB();
-
-    let userRes = await db.execute({
-      sql: "SELECT * FROM users WHERE email = ?",
-      args: [claims.email],
-    });
-
-    let userId = String(userRes.rows[0]?.id || "");
-    if (!userId) {
-      userId = uuidv4();
-      const generatedPasswordHash = await hashPassword(`google-oauth-${uuidv4()}`);
-
-      await db.execute({
-        sql: `INSERT INTO users (id, email, name, password, timezone, languages, communication_style)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          userId,
-          claims.email,
-          claims.name || claims.email.split("@")[0],
-          generatedPasswordHash,
-          "UTC",
-          "English",
-          "casual",
-        ],
-      });
-
-      await addTokens(userId, 10, "signup_bonus", "Welcome bonus tokens (Google signup)");
-
-      userRes = await db.execute({
-        sql: "SELECT * FROM users WHERE id = ?",
-        args: [userId],
-      });
-    }
-
-    const row = userRes.rows[0] as Record<string, unknown>;
-    const token = generateToken(String(row.id), String(row.email));
+    const userId = uuidv4();
+    const userEmail = claims.email;
+    const userName = claims.name || claims.email.split("@")[0];
+    const createdAt = new Date().toISOString();
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -144,7 +108,71 @@ export async function GET(req: NextRequest) {
   <body>
     <p>Signing you in...</p>
     <script>
-      localStorage.setItem("skillswap_token", ${JSON.stringify(token)});
+      (function () {
+        var STATE_KEY = "skillswap_mock_state_v1";
+        var user = {
+          id: ${JSON.stringify(userId)},
+          email: ${JSON.stringify(userEmail)},
+          name: ${JSON.stringify(userName)},
+          avatar: undefined,
+          bio: "Google OAuth user",
+          languages: "English",
+          timezone: "UTC",
+          communication_style: "casual",
+          tokens: 10,
+          reputation: 0,
+          is_verified: 1,
+          is_flagged: 0,
+          created_at: ${JSON.stringify(createdAt)},
+          password: "google-oauth"
+        };
+
+        var state = {
+          users: [],
+          skills: [],
+          userSkills: [],
+          sessions: [],
+          ratings: [],
+          badges: [],
+          tokenTransactions: [],
+          progress: [],
+          assessments: []
+        };
+
+        try {
+          var raw = localStorage.getItem(STATE_KEY);
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            state = Object.assign(state, parsed || {});
+            state.users = Array.isArray(state.users) ? state.users : [];
+            state.skills = Array.isArray(state.skills) ? state.skills : [];
+            state.userSkills = Array.isArray(state.userSkills) ? state.userSkills : [];
+            state.sessions = Array.isArray(state.sessions) ? state.sessions : [];
+            state.ratings = Array.isArray(state.ratings) ? state.ratings : [];
+            state.badges = Array.isArray(state.badges) ? state.badges : [];
+            state.tokenTransactions = Array.isArray(state.tokenTransactions) ? state.tokenTransactions : [];
+            state.progress = Array.isArray(state.progress) ? state.progress : [];
+            state.assessments = Array.isArray(state.assessments) ? state.assessments : [];
+          }
+        } catch (_) {}
+
+        var existing = state.users.find(function (u) { return u && u.email === user.email; });
+        var finalId = existing && existing.id ? existing.id : user.id;
+        if (!existing) {
+          state.users.push(user);
+          state.tokenTransactions.push({
+            id: "tx-" + finalId,
+            user_id: finalId,
+            amount: 10,
+            type: "signup_bonus",
+            description: "Welcome bonus tokens (Google signup)",
+            created_at: ${JSON.stringify(createdAt)}
+          });
+        }
+
+        localStorage.setItem(STATE_KEY, JSON.stringify(state));
+        localStorage.setItem("skillswap_token", "mock:" + finalId);
+      })();
       window.location.replace("/dashboard");
     </script>
   </body>
