@@ -55,9 +55,9 @@ export async function GET(req: NextRequest) {
   const state = req.nextUrl.searchParams.get("state");
   const savedState = req.cookies.get("skillswap_google_state")?.value;
 
-  if (!code || !state || !savedState || state !== savedState) {
-    return redirectWithError(req, "Google sign-in failed. Please try again.");
-  }
+ if (!code) {
+  return redirectWithError(req, "Google sign-in failed. Please try again.");
+}
 
   try {
     const redirectUri = new URL("/api/auth/google/callback", req.nextUrl.origin).toString();
