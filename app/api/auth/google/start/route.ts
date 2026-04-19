@@ -46,8 +46,8 @@ export async function GET(req: NextRequest) {
   const res = NextResponse.redirect(authUrl);
   res.cookies.set("skillswap_google_state", state, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: "none",
+    secure: true,
     maxAge: 10 * 60,
     path: "/",
   });

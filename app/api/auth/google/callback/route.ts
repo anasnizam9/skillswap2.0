@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
 
     response.cookies.set("skillswap_google_state", "", {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "none",
       secure: process.env.NODE_ENV === "production",
       maxAge: 0,
       path: "/",
